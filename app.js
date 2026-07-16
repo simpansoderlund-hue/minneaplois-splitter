@@ -4,7 +4,7 @@
 // 3. Pick the same SHARED_KEY here and in Code.gs (a shared secret, not real security —
 //    anyone who views this page's source can read it, same as the URL below).
 
-const API_URL = 'https://script.google.com/macros/s/PASTE_YOUR_DEPLOYMENT_ID/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyFvreQ2xqhzGyDjvsx0gftvunTz0s9yuhpSBu9-F7HhP2zqQ5zwskJ37TiXKNG2PVFew/exec';
 const SHARED_KEY = 'minneapolis-ope';
 
 const state = {
