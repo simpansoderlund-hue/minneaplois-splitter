@@ -640,6 +640,13 @@ button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
   color: #fff;
 }
 
+/* A boot is a no-go: it still lands on green, but reads as "don't". */
+.reaction-btn.ready.boot {
+  background: linear-gradient(160deg, rgba(120, 96, 74, 0.5), rgba(120, 96, 74, 0.15));
+  border-color: #8a6f52;
+  color: var(--muted);
+}
+
 /* ---------- Bob Dylan Clicker easter egg ---------- */
 
 .dylan-card { max-width: 420px; }

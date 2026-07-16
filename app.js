@@ -862,39 +862,46 @@ document.getElementById('race-track').addEventListener('pointerdown', (e) => {
 });
 
 // ---------- Ice-fishing easter egg mini-game ("Set the Hook") ----------
-// Wait for the tip-up flag to go green (a bite), then set the hook as fast as
-// possible. Jig while it's still red (waiting) and that's a spooked-the-fish
-// miss. Faster hooksets on green score more. Everyone gets the exact same
-// number of rounds (not a fixed time window) so scores are directly
-// comparable — a time window would let random luck (short vs. long waits)
-// decide how many chances someone even gets.
+// Wait for the tip-up to go green (a bite), read what's on the line, then act.
+// It's a go/no-go reaction test rather than a pure one: a fish wants a fast
+// hookset, but an old boot wants to be LEFT ALONE — hook it and you're
+// penalised, ignore it and you're fine. Jig while it's still red (waiting) and
+// that's a spooked-the-fish miss.
+//
+// Fairness: every run deals the exact same six catches (REACTION_DECK), just
+// shuffled into a different order. Composition is identical for everyone, so
+// only reaction time and judgement separate scores — no one wins by rolling a
+// luckier set of fish. (Weighted-random catches would have handed the win to
+// whoever replayed until they got a good roll, which matters because this
+// board pays out a real prize.)
 
-const REACTION_ROUND_COUNT = 6;
 const REACTION_MIN_DELAY_MS = 1000;
 const REACTION_MAX_DELAY_MS = 3500;
 const REACTION_EARLY_PENALTY = 6;
+const REACTION_BOOT_PENALTY = 3;
+const REACTION_DECIDE_MS = 1400;    // window to act once the bite lands
 const REACTION_POINT_STEP_MS = 100; // one point per 100ms faster than the cap
 const REACTION_POINT_CAP_MS = 1000; // reactions at/above this score 0
 
-let reactionState = null; // { score, roundsPlayed, phase, readyAt, roundTimeout }
+const REACTION_CATCHES = {
+  panfish: { emoji: '🐟', label: 'Panfish', multiplier: 1 },
+  walleye: { emoji: '🏆', label: 'Trophy walleye', multiplier: 2 },
+  boot: { emoji: '🥾', label: 'Old boot', multiplier: 0 },
+};
 
-// What's on the end of the line this round. The trophy walleye (Minnesota's
-// state fish) doubles the round's points, and a snagged boot is worth nothing
-// no matter how fast you are — so a bite is no longer a guaranteed payday and
-// you have to actually look before you yank.
-const REACTION_CATCHES = [
-  { id: 'panfish', emoji: '🐟', label: 'Panfish', weight: 0.55, multiplier: 1 },
-  { id: 'walleye', emoji: '🏆', label: 'Trophy walleye', weight: 0.3, multiplier: 2 },
-  { id: 'boot', emoji: '🥾', label: 'Old boot', weight: 0.15, multiplier: 0 },
-];
+// The same hand every time, dealt in a random order.
+const REACTION_DECK = ['panfish', 'panfish', 'panfish', 'walleye', 'walleye', 'boot'];
+const REACTION_ROUND_COUNT = REACTION_DECK.length;
 
-function pickReactionCatch() {
-  let roll = Math.random();
-  for (const c of REACTION_CATCHES) {
-    if (roll < c.weight) return c;
-    roll -= c.weight;
+let reactionState = null; // { score, roundsPlayed, phase, readyAt, roundTimeout, decideTimeout, catch, deck }
+
+function shuffledDeck(ids) {
+  const a = ids.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return REACTION_CATCHES[0];
+  return a;
 }
 
 function startReactionRound() {
@@ -903,50 +910,72 @@ function startReactionRound() {
   reactionState.phase = 'waiting';
   reactionState.catch = null;
   btn.textContent = 'Wait for a bite…';
-  btn.classList.remove('ready', 'trophy');
+  btn.classList.remove('ready', 'trophy', 'boot');
   btn.classList.add('waiting');
 
   const delay = REACTION_MIN_DELAY_MS + Math.random() * (REACTION_MAX_DELAY_MS - REACTION_MIN_DELAY_MS);
   reactionState.roundTimeout = setTimeout(() => {
     if (!reactionState) return;
+    const c = REACTION_CATCHES[reactionState.deck[reactionState.roundsPlayed]];
     reactionState.phase = 'ready';
     reactionState.readyAt = performance.now();
-    reactionState.catch = pickReactionCatch();
-    btn.textContent = `${reactionState.catch.emoji} ${reactionState.catch.label} — set the hook!`;
+    reactionState.catch = c;
+    btn.textContent = `${c.emoji} ${c.label} — ${c.multiplier === 0 ? 'leave it!' : 'set the hook!'}`;
     btn.classList.remove('waiting');
     btn.classList.add('ready');
-    if (reactionState.catch.multiplier > 1) btn.classList.add('trophy');
+    if (c.multiplier > 1) btn.classList.add('trophy');
+    if (c.multiplier === 0) btn.classList.add('boot');
+    // No-go path: if they correctly sit on their hands, resolve it for them.
+    reactionState.decideTimeout = setTimeout(() => resolveReactionRound(null), REACTION_DECIDE_MS);
   }, delay);
 }
 
-function onReactionBtnClick() {
-  if (!reactionState) return;
+// clickedAt === null means the decide window lapsed without a click.
+function resolveReactionRound(clickedAt) {
+  if (!reactionState || reactionState.phase !== 'ready') return;
+  clearTimeout(reactionState.decideTimeout);
+  reactionState.phase = 'done';
   const feedbackEl = document.getElementById('reaction-feedback');
+  const c = reactionState.catch;
 
-  if (reactionState.phase === 'waiting') {
-    clearTimeout(reactionState.roundTimeout);
-    reactionState.score -= REACTION_EARLY_PENALTY;
-    feedbackEl.textContent = `Jigged too soon — you spooked it! -${REACTION_EARLY_PENALTY}`;
+  if (clickedAt === null) {
+    feedbackEl.textContent = c.multiplier === 0
+      ? `${c.emoji} ${c.label} — good call, you left it. +0`
+      : `${c.emoji} The one that got away… +0`;
+  } else if (c.multiplier === 0) {
+    reactionState.score -= REACTION_BOOT_PENALTY;
+    feedbackEl.textContent = `${c.emoji} You hooked an old boot! -${REACTION_BOOT_PENALTY}`;
   } else {
-    const elapsed = performance.now() - reactionState.readyAt;
+    const elapsed = clickedAt - reactionState.readyAt;
     const base = Math.max(0, Math.round((REACTION_POINT_CAP_MS - elapsed) / REACTION_POINT_STEP_MS));
-    const c = reactionState.catch;
     const points = base * c.multiplier;
     reactionState.score += points;
-    feedbackEl.textContent = c.multiplier === 0
-      ? `${c.emoji} ${c.label}! ${Math.round(elapsed)}ms of your life, +0`
-      : `${c.emoji} ${c.label} — ${Math.round(elapsed)}ms — +${points}${c.multiplier > 1 ? ` (${base} ×${c.multiplier})` : ''}`;
+    feedbackEl.textContent = `${c.emoji} ${c.label} — ${Math.round(elapsed)}ms — +${points}${c.multiplier > 1 ? ` (${base} ×${c.multiplier})` : ''}`;
   }
+  advanceReactionRound();
+}
 
+function advanceReactionRound() {
   reactionState.roundsPlayed++;
   document.getElementById('reaction-score').textContent = String(reactionState.score);
   document.getElementById('reaction-round').textContent = `${reactionState.roundsPlayed}/${REACTION_ROUND_COUNT}`;
-
   if (reactionState.roundsPlayed >= REACTION_ROUND_COUNT) {
     endReactionGame();
   } else {
     startReactionRound();
   }
+}
+
+function onReactionBtnClick() {
+  if (!reactionState) return;
+  if (reactionState.phase === 'waiting') {
+    clearTimeout(reactionState.roundTimeout);
+    reactionState.score -= REACTION_EARLY_PENALTY;
+    document.getElementById('reaction-feedback').textContent = `Jigged too soon — you spooked it! -${REACTION_EARLY_PENALTY}`;
+    advanceReactionRound();
+    return;
+  }
+  if (reactionState.phase === 'ready') resolveReactionRound(performance.now());
 }
 
 function startReactionGame() {
@@ -957,7 +986,16 @@ function startReactionGame() {
   document.getElementById('reaction-feedback').classList.remove('hidden');
   document.getElementById('reaction-btn').classList.remove('hidden');
 
-  reactionState = { score: 0, roundsPlayed: 0, phase: null, readyAt: 0, roundTimeout: null, catch: null };
+  reactionState = {
+    score: 0,
+    roundsPlayed: 0,
+    phase: null,
+    readyAt: 0,
+    roundTimeout: null,
+    decideTimeout: null,
+    catch: null,
+    deck: shuffledDeck(REACTION_DECK),
+  };
   document.getElementById('reaction-score').textContent = '0';
   document.getElementById('reaction-round').textContent = `0/${REACTION_ROUND_COUNT}`;
   document.getElementById('reaction-feedback').textContent = '';
@@ -968,6 +1006,7 @@ function startReactionGame() {
 async function endReactionGame() {
   if (!reactionState) return;
   clearTimeout(reactionState.roundTimeout);
+  clearTimeout(reactionState.decideTimeout);
   const score = reactionState.score;
   reactionState = null;
 
@@ -976,7 +1015,9 @@ async function endReactionGame() {
   document.getElementById('reaction-feedback').classList.add('hidden');
 
   const resultEl = document.getElementById('reaction-result');
-  resultEl.textContent = `🎣 Final score: ${score}! ${score >= 50 ? 'Fastest hook on the lake.' : 'Reflexes could use a hotdish break.'}`;
+  // Max is 70 (instant hooksets, boot ignored). 40 lands around a ~430ms
+  // average, which is a good run once you factor in reading the catch first.
+  resultEl.textContent = `🎣 Final score: ${score}! ${score >= 40 ? 'Fastest hook on the lake.' : 'Reflexes could use a hotdish break.'}`;
   resultEl.classList.remove('hidden');
 
   const startBtn = document.getElementById('reaction-start-btn');
@@ -996,6 +1037,7 @@ async function endReactionGame() {
 function resetReactionGameView() {
   if (reactionState) {
     clearTimeout(reactionState.roundTimeout);
+    clearTimeout(reactionState.decideTimeout);
     reactionState = null;
   }
   document.getElementById('reaction-intro').classList.remove('hidden');

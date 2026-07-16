@@ -45,12 +45,14 @@ boards live in one place: the **🏆 Top scores** badge in the header.
   clear 🕳️ potholes, 🚧 cones and 🦌 deer. Every hazard cleared is a point and
   the road keeps speeding up; one hit ends the run. **This one costs $0.01 a
   play** — see below.
-- **🎣 Set the Hook** — the "🎣 Set the Hook" button on the People tab. An
-  ice-fishing reaction game: wait for a bite (the button turns green), then set
-  the hook as fast as you can. Jig too early and you spook the fish (-6). What's
-  on the line varies: a 🐟 panfish scores normally, a 🏆 **trophy walleye**
-  (Minnesota's state fish) is worth **double**, and a 🥾 old boot scores nothing
-  however fast you are. Everyone gets 6 rounds, so scores stay comparable.
+- **🎣 Set the Hook** — the "🎣 Set the Hook" button on the People tab. A
+  go/no-go ice-fishing game: wait for a bite, then read what's on the line
+  before you yank (you get ~1.4s). 🐟 Panfish score normally and a 🏆 **trophy
+  walleye** (Minnesota's state fish) is worth **double** — hook those fast. A 🥾
+  **old boot is a trap**: leave it alone for +0, or hook it for -3. Jigging
+  before the bite is -6. Every run deals the **same six catches** (3 panfish,
+  2 walleye, 1 boot) in a shuffled order, so composition is identical for
+  everyone and only speed/judgement separates scores.
 - **🎸 Bob Dylan Clicker** — tap the 🎸 badge in the header. A Cookie-Clicker
   idle game starring Minnesota's own Bob Dylan: click Bob to earn **Dylans**,
   then spend them on gear and gigs (harmonica → electric guitar → Nobel Prize →
