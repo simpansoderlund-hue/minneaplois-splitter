@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trip Splitter — Minneapolis</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="skyline-banner">
+      <svg class="skyline-svg" viewBox="0 0 800 220" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#241056"/>
+            <stop offset="40%" stop-color="#5f2b7a"/>
+            <stop offset="72%" stop-color="#c65a8f"/>
+            <stop offset="100%" stop-color="#f2c14e"/>
+          </linearGradient>
+          <linearGradient id="riverGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2a2740"/>
+            <stop offset="100%" stop-color="#141426"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="800" height="220" fill="url(#sky)" />
+
+        <!-- Stars -->
+        <g fill="#ffffff" opacity="0.7">
+          <circle cx="60" cy="30" r="1.4"/>
+          <circle cx="120" cy="15" r="1"/>
+          <circle cx="200" cy="40" r="1.2"/>
+          <circle cx="300" cy="20" r="1"/>
+          <circle cx="500" cy="25" r="1.3"/>
+          <circle cx="650" cy="18" r="1"/>
+          <circle cx="720" cy="45" r="1.2"/>
+        </g>
+
+        <!-- Purple-Rain moon -->
+        <circle cx="655" cy="86" r="34" fill="#f7d774" opacity="0.9"/>
+
+        <!-- Left cluster: shorter downtown blocks -->
+        <g fill="#1b1630">
+          <rect x="18" y="138" width="26" height="52"/>
+          <rect x="52" y="118" width="22" height="72"/>
+          <rect x="86" y="150" width="30" height="40"/>
+          <rect x="120" y="132" width="24" height="58"/>
+        </g>
+
+        <!-- Foshay Tower: tapered obelisk, downtown's old giant -->
+        <g fill="#241d3a">
+          <polygon points="196,190 196,104 203,96 203,76 219,76 219,96 226,104 226,190"/>
+          <rect x="210" y="60" width="2" height="16"/>
+        </g>
+
+        <!-- IDS Center: tallest, flat glass tower with stepped notch corners -->
+        <g fill="#2b2344">
+          <rect x="352" y="46" width="52" height="144"/>
+          <rect x="346" y="70" width="6" height="120"/>
+          <rect x="404" y="70" width="6" height="120"/>
+        </g>
+        <g fill="#f2c14e" opacity="0.45">
+          <rect x="360" y="60" width="4" height="8"/>
+          <rect x="372" y="78" width="4" height="8"/>
+          <rect x="392" y="66" width="4" height="8"/>
+          <rect x="384" y="100" width="4" height="8"/>
+          <rect x="366" y="120" width="4" height="8"/>
+        </g>
+
+        <!-- Capella Tower: rectangular shaft with an open crown ring on top -->
+        <g fill="#221b38">
+          <rect x="300" y="96" width="40" height="94"/>
+        </g>
+        <ellipse cx="320" cy="94" rx="22" ry="8" fill="none" stroke="#3a2f57" stroke-width="4"/>
+
+        <!-- Wells Fargo Center: stepped art-deco setback crown -->
+        <g fill="#1e1834">
+          <rect x="424" y="120" width="46" height="70"/>
+          <rect x="432" y="104" width="30" height="16"/>
+          <rect x="440" y="90" width="14" height="14"/>
+          <polygon points="440,90 447,78 454,90"/>
+        </g>
+
+        <!-- Right cluster: shorter downtown blocks -->
+        <g fill="#191428">
+          <rect x="500" y="140" width="30" height="50"/>
+          <rect x="540" y="122" width="24" height="68"/>
+          <rect x="576" y="150" width="30" height="40"/>
+          <rect x="700" y="134" width="26" height="56"/>
+          <rect x="740" y="150" width="30" height="40"/>
+        </g>
+
+        <!-- Mississippi River -->
+        <rect x="0" y="190" width="800" height="30" fill="url(#riverGrad)"/>
+
+        <!-- Stone Arch Bridge: gently arched deck with stone arches over the river -->
+        <g>
+          <rect x="0" y="182" width="800" height="8" fill="#3a3350"/>
+          <g fill="#2c2742">
+            <path d="M20 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M100 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M180 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M260 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M340 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M420 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M500 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M580 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M660 190 a30 12 0 0 1 60 0 Z"/>
+            <path d="M740 190 a30 12 0 0 1 60 0 Z"/>
+          </g>
+        </g>
+      </svg>
+      <div class="header-content">
+        <h1>💸 Trip Splitter</h1>
+        <div class="header-badges">
+          <button type="button" id="whoami-badge" class="log-badge hidden" title="Click to switch who you are">
+            <span id="whoami-label"></span>
+          </button>
+          <button type="button" id="log-badge" class="log-badge" title="View activity log">
+            <span>📋 Activity log</span>
+          </button>
+          <button type="button" id="fair-badge" class="log-badge" title="???">
+            <span>🎡</span>
+          </button>
+          <button type="button" id="dylan-badge" class="log-badge" title="???">
+            <span>🎸</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="setup-warning" class="setup-warning hidden">
+    Set <code>API_URL</code> and <code>SHARED_KEY</code> at the top of <code>app.js</code> before this will work.
+    See README.md for setup steps.
+  </div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="add">Add Expense</button>
+    <button class="tab-btn" data-tab="expenses">Expenses</button>
+    <button class="tab-btn" data-tab="people">People</button>
+    <button class="tab-btn" data-tab="balances">Balances</button>
+  </nav>
+
+  <main>
+    <section id="tab-add" class="tab-panel active">
+      <h2>Add an expense</h2>
+      <form id="expense-form">
+        <label>
+          Description
+          <input type="text" id="exp-description" placeholder="e.g. Juicy Lucy at Matt's Bar" required />
+        </label>
+
+        <label>
+          Amount ($)
+          <input type="number" id="exp-amount" step="0.01" min="0.01" placeholder="0.00" required />
+        </label>
+
+        <label>
+          Date
+          <input type="date" id="exp-date" required />
+        </label>
+
+        <label>
+          Paid by
+          <select id="exp-paid-by" required></select>
+        </label>
+
+        <fieldset id="exp-participants">
+          <legend>Split between</legend>
+          <div class="checkbox-list" id="participant-checkboxes"></div>
+          <div class="checkbox-actions">
+            <button type="button" id="select-all-btn">Select all</button>
+            <button type="button" id="select-none-btn">Select none</button>
+          </div>
+        </fieldset>
+
+        <button type="submit" class="primary">Add Expense</button>
+        <p id="add-error" class="error"></p>
+      </form>
+    </section>
+
+    <section id="tab-expenses" class="tab-panel">
+      <h2>All expenses</h2>
+      <p class="hint">Made a mistake? Fix or remove the row directly in the Google Sheet — there's no delete button here on purpose.</p>
+      <div id="expenses-list"></div>
+    </section>
+
+    <section id="tab-people" class="tab-panel">
+      <h2>People on the trip</h2>
+      <p class="hint">Removing someone happens in the Google Sheet, not here (removing them here would break the math for any expense they're part of).</p>
+      <form id="person-form">
+        <input type="text" id="person-name" placeholder="Friend's name" required />
+        <button type="submit" class="primary">Add Person</button>
+      </form>
+      <p id="person-error" class="error"></p>
+      <div id="people-list"></div>
+      <button type="button" id="reaction-game-badge" class="log-badge" style="margin-top: 16px">
+        <span>🎣 Set the Hook</span>
+      </button>
+    </section>
+
+    <section id="tab-balances" class="tab-panel">
+      <h2>Balances</h2>
+      <div id="balances-list"></div>
+      <h2>Settle up</h2>
+      <div id="settle-list"></div>
+      <button type="button" id="award-prize-btn" class="log-badge" style="margin-top: 16px">
+        <span>🏆 Award Mini-Game Prizes ($2 each)</span>
+      </button>
+    </section>
+  </main>
+
+  <div id="confirm-overlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <p id="confirm-message"></p>
+      <div class="modal-actions">
+        <button type="button" id="confirm-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="confirm-ok" class="btn-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="log-overlay" class="modal-overlay hidden">
+    <div class="modal-card log-card">
+      <div class="log-card-header">
+        <h2>Activity Log</h2>
+        <button type="button" id="log-close" class="btn-secondary">Close</button>
+      </div>
+      <pre id="log-content" class="log-content"></pre>
+    </div>
+  </div>
+
+  <div id="success-overlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <p id="success-message">✅ Expense added!</p>
+      <div class="modal-actions">
+        <button type="button" id="success-ok" class="btn-confirm">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="name-gate" class="modal-overlay hidden">
+    <div class="modal-card">
+      <p style="font-weight: 600; margin-bottom: 4px">Who are you?</p>
+      <p class="hint" style="margin-top: 0">Enter your name to continue — upper/lowercase doesn't matter.</p>
+      <form id="name-gate-form">
+        <input type="text" id="name-gate-input" placeholder="Your name" autocomplete="name" required />
+        <p id="name-gate-error" class="error"></p>
+        <div class="modal-actions">
+          <button type="button" id="name-gate-add" class="btn-secondary hidden"></button>
+          <button type="submit" class="primary">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="fair-game-overlay" class="modal-overlay hidden">
+    <div class="modal-card game-card">
+      <div class="log-card-header">
+        <h2>🎡 State Fair Scramble</h2>
+        <button type="button" id="game-close" class="btn-secondary">Close</button>
+      </div>
+      <p class="hint" id="game-intro">
+        Grab as many 🍪 Sweet Martha's cookies as you can in 15 seconds — the
+        line's long and they go fast. Watch out for the 🦟 state bird (the
+        mosquito): swat one by mistake and it's -2 points.
+      </p>
+      <div class="game-hud hidden" id="game-hud">
+        <span>Score: <strong id="game-score">0</strong></span>
+        <span>Time: <strong id="game-time">15</strong>s</span>
+      </div>
+      <div class="game-grid hidden" id="game-grid"></div>
+      <p class="hint hidden" id="game-result"></p>
+      <div id="game-leaderboard"></div>
+      <button type="button" id="game-start-btn" class="primary">Start</button>
+    </div>
+  </div>
+
+  <div id="reaction-game-overlay" class="modal-overlay hidden">
+    <div class="modal-card game-card">
+      <div class="log-card-header">
+        <h2>🎣 Set the Hook</h2>
+        <button type="button" id="reaction-close" class="btn-secondary">Close</button>
+      </div>
+      <p class="hint" id="reaction-intro">
+        Wait for a bite (the button turns green), then set the hook as fast as
+        you can — faster hooksets score more. Jig too early and you spook the
+        fish: -6. Everyone gets exactly 6 tip-ups, so it's a fair comparison.
+      </p>
+      <div class="game-hud hidden" id="reaction-hud">
+        <span>Score: <strong id="reaction-score">0</strong></span>
+        <span>Round: <strong id="reaction-round">0/6</strong></span>
+      </div>
+      <button type="button" id="reaction-btn" class="reaction-btn hidden">Drop your line…</button>
+      <p class="hint hidden" id="reaction-feedback"></p>
+      <p class="hint hidden" id="reaction-result"></p>
+      <div id="reaction-leaderboard"></div>
+      <button type="button" id="reaction-start-btn" class="primary">Start</button>
+    </div>
+  </div>
+
+  <div id="dylan-game-overlay" class="modal-overlay hidden">
+    <div class="modal-card game-card dylan-card">
+      <div class="log-card-header">
+        <h2>🎸 Bob Dylan Clicker</h2>
+        <button type="button" id="dylan-close" class="btn-secondary">Close</button>
+      </div>
+      <p class="hint" id="dylan-intro">
+        Minnesota's own. Click Bob to rack up <strong>Dylans</strong>, then spend
+        them on gear and gigs that keep clicking for you — the times they are
+        a-clickin'.
+      </p>
+      <p class="hint hidden" id="dylan-away"></p>
+
+      <div class="dylan-counter">
+        <span id="dylan-count">0</span> Dylans
+        <div class="dylan-rate" id="dylan-dps">0/s · 1/click</div>
+      </div>
+
+      <div class="dylan-click-wrap" id="dylan-click-wrap">
+        <button type="button" id="dylan-click-target" class="dylan-click-target" title="Click Bob!">
+          <span class="dylan-face">🧑‍🎤</span>
+          <span class="dylan-name">Bob Dylan</span>
+        </button>
+      </div>
+
+      <div class="dylan-upgrades" id="dylan-upgrades"></div>
+
+      <div id="dylan-leaderboard"></div>
+
+      <button type="button" id="dylan-reset" class="dylan-reset">Reset progress</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
