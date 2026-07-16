@@ -17,50 +17,62 @@ that can read/write `db.json`, so it can safely allow deleting people and
 expenses (soft-delete, with backups).
 
 This version is a fully static site (just HTML/CSS/JS) that anyone in the world
-can view the source of once it's on GitHub Pages. That changes two things on
-purpose:
+can view the source of once it's on GitHub Pages. Two things to keep in mind:
 
-- **No delete buttons.** Removing a person or an expense here would mean giving
-  every visitor's browser a way to delete rows in your spreadsheet. Instead:
-  fix mistakes by editing the Google Sheet directly (delete the row, or just
-  edit the wrong cell). The People and Expenses tabs both have a note reminding
-  you of this.
+- **Deleting is trust-based.** Expenses (and settlements) have a 🗑 Delete
+  button with an "are you sure?" confirm. Because the site is static, anyone who
+  can open the page can also delete rows — the same is already true for adding
+  expenses. There's no per-user permission; it relies on the group being
+  trusted. People still can't be deleted from the app (removing someone would
+  break the math for any expense they're part of) — do that in the Google Sheet.
 - **The "shared key" is not real security.** It's a shared secret sitting in
   plain text in `app.js`, which anyone can view via "View Source". It stops
   casual/accidental writes from other scripts hitting your endpoint, not a
   determined person. Don't put anything sensitive in the sheet.
 
-Everything else — adding people, adding expenses, balances, the simplified
-"who pays who" settle-up list, marking a settlement as paid, and an activity
-log — works the same way it does in split-app.
+Everything else — adding people, adding/deleting expenses, balances, the
+simplified "who pays who" settle-up list, marking a settlement as paid, and an
+activity log — works the same way it does in split-app.
 
-## The hidden mini-games 🎡🎣🎸
+## The hidden mini-games 🏎️🎣🎸
 
 Three easter-egg games, all backed by the sheet (per person) so scores and
-progress follow you across devices and everyone shares a leaderboard:
+progress follow you across devices and everyone shares a leaderboard. All the
+boards live in one place: the **🏆 Top scores** badge in the header.
 
-- **🎡 State Fair Scramble** — tap the 🎡 badge in the header. A whack-a-mole
-  where you grab 🍪 Sweet Martha's cookies as fast as you can in 15 seconds,
-  but swatting the 🦟 mosquito (Minnesota's "state bird") costs you 2 points.
-  Top-5 best scores.
+- **🏎️ Pothole Dodge** — tap the 🏎️ badge in the header. A three-lane racing
+  dodger: swerve (◀ ▶ buttons, arrow keys, or tap either half of the track) to
+  clear 🕳️ potholes, 🚧 cones and 🦌 deer. Every hazard cleared is a point and
+  the road keeps speeding up; one hit ends the run. **This one costs $0.01 a
+  play** — see below.
 - **🎣 Set the Hook** — the "🎣 Set the Hook" button on the People tab. An
   ice-fishing reaction game: wait for a bite (the button turns green), then set
-  the hook as fast as you can. Jig too early and you spook the fish (-6).
-  Everyone gets 6 rounds so scores are directly comparable. Top-5 best scores.
+  the hook as fast as you can. Jig too early and you spook the fish (-6). What's
+  on the line varies: a 🐟 panfish scores normally, a 🏆 **trophy walleye**
+  (Minnesota's state fish) is worth **double**, and a 🥾 old boot scores nothing
+  however fast you are. Everyone gets 6 rounds, so scores stay comparable.
 - **🎸 Bob Dylan Clicker** — tap the 🎸 badge in the header. A Cookie-Clicker
   idle game starring Minnesota's own Bob Dylan: click Bob to earn **Dylans**,
   then spend them on gear and gigs (harmonica → electric guitar → Nobel Prize →
   Never Ending Tour…) that auto-earn Dylans per second. Your count and upgrades
   save to the sheet under your name — one running total per person, not a
   best-of — so it keeps counting across visits and devices (with capped "while
-  you were away" idle progress), and a live **Top 5 Dylans** board shows each
-  player with their current Dylan count.
+  you were away" idle progress).
+
+### Pothole Dodge costs a penny 🪙
+
+Every play bills a **real $0.01 expense** to the trip ledger — description
+`🏎️ Pothole Dodge play`, paid by whoever played and split across everyone. So
+the arcade genuinely shows up in Expenses/Balances, and the game shows a running
+"the machine has taken $X.XX over N plays" total that climbs as people play.
+It's a normal expense row, so 🗑 Delete it (or edit the sheet) to undo. If
+nobody's signed in, there's no one to bill and the play is free.
 
 On the Balances tab, **🏆 Award Mini-Game Prizes** drops two real $2 credits
-into the ledger — one each to the State Fair and Set the Hook champions, funded
-by everyone else (ties split evenly). The Dylan Clicker is just for bragging
-rights and isn't part of the prize payout. Prizes are just normal expense rows,
-so undo them in the sheet like any other mistake.
+into the ledger — one each to the Pothole Dodge and Set the Hook champions,
+funded by everyone else (ties split evenly). The Dylan Clicker is just for
+bragging rights and isn't part of the prize payout. Prizes are just normal
+expense rows, so undo them in the sheet like any other mistake.
 
 ## Setup
 

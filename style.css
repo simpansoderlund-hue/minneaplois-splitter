@@ -295,6 +295,35 @@ button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
   white-space: nowrap;
 }
 
+.card-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.delete-expense-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.delete-expense-btn:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.delete-expense-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .person-row {
   display: flex;
   justify-content: space-between;
@@ -474,7 +503,7 @@ button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
   word-break: break-word;
 }
 
-/* ---------- State Fair Scramble easter egg mini-game ---------- */
+/* ---------- Pothole Dodge easter egg mini-game (racing) ---------- */
 
 .game-card {
   max-width: 420px;
@@ -488,47 +517,91 @@ button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
   margin-bottom: 10px;
 }
 
-.game-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.race-track {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #241d3a, #16121f);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.race-lane-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed rgba(255, 255, 255, 0.18);
+}
+
+.race-car {
+  position: absolute;
+  bottom: 8px;
+  transform: translateX(-50%);
+  font-size: 2rem;
+  line-height: 1;
+  transition: left 0.08s ease-out;
+  z-index: 2;
+  user-select: none;
+}
+
+.race-car.crashed { animation: race-crash 0.4s ease; }
+
+@keyframes race-crash {
+  0%, 100% { transform: translateX(-50%) rotate(0); }
+  25% { transform: translateX(-50%) rotate(-18deg) scale(1.15); }
+  75% { transform: translateX(-50%) rotate(18deg) scale(1.15); }
+}
+
+.race-obstacle {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 1.8rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.race-controls {
+  display: flex;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-.game-cell {
-  aspect-ratio: 1;
+.race-ctrl {
+  flex: 1;
   background: var(--panel-2);
   border: 1px solid var(--border);
+  color: var(--text);
+  padding: 14px;
   border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.8rem;
+  font-size: 1.2rem;
   cursor: pointer;
   user-select: none;
-  padding: 0;
 }
 
-.game-cell.active {
-  background: linear-gradient(160deg, rgba(224, 166, 59, 0.3), rgba(224, 166, 59, 0.08));
-  border-color: var(--accent);
+.race-ctrl:hover { border-color: var(--accent); }
+.race-ctrl:active { background: var(--panel); }
+
+/* ---------- Top scores (combined leaderboards) ---------- */
+
+.scores-scroll {
+  overflow-y: auto;
 }
 
-.game-cell.active.decoy {
-  background: linear-gradient(160deg, rgba(224, 117, 92, 0.35), rgba(224, 117, 92, 0.08));
-  border-color: var(--bad);
+.scores-section {
+  margin-bottom: 18px;
 }
 
-/* Shared by every mini-game's leaderboard container */
-#game-leaderboard,
-#reaction-leaderboard,
-#dylan-leaderboard {
-  margin-bottom: 12px;
+.scores-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--accent);
 }
 
-#game-leaderboard .balance-row,
-#reaction-leaderboard .balance-row,
-#dylan-leaderboard .balance-row {
+.scores-section .balance-row {
   padding: 8px 12px;
 }
 
@@ -558,6 +631,13 @@ button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
 .reaction-btn.ready {
   background: linear-gradient(160deg, rgba(76, 175, 125, 0.4), rgba(76, 175, 125, 0.12));
   border-color: var(--good);
+}
+
+/* A trophy walleye is worth double — make it unmistakable. */
+.reaction-btn.ready.trophy {
+  background: linear-gradient(160deg, rgba(224, 166, 59, 0.45), rgba(224, 166, 59, 0.14));
+  border-color: var(--accent);
+  color: #fff;
 }
 
 /* ---------- Bob Dylan Clicker easter egg ---------- */

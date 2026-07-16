@@ -362,12 +362,38 @@ function renderExpenses() {
             }
           </div>
         </div>
-        <div style="text-align:right">
+        <div class="card-side">
           <div class="card-amount">${money(exp.amount)}</div>
+          <button type="button" class="delete-expense-btn" data-id="${escapeHtml(exp.id)}"
+            title="Delete this ${exp.isSettlement ? 'settlement' : 'expense'}">🗑 Delete</button>
         </div>
       </div>
     </div>
   `).join('');
+
+  container.querySelectorAll('.delete-expense-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const exp = state.expenses.find(e => e.id === btn.dataset.id);
+      if (!exp) return;
+      const what = exp.isSettlement
+        ? `the settlement "${nameOf(exp.paidBy)} paid ${nameOf(exp.participantIds[0])}" (${money(exp.amount)})`
+        : `"${exp.description}" (${money(exp.amount)})`;
+      const ok = await confirmDialog(`Delete ${what}? This can't be undone from the app.`, {
+        okLabel: 'Delete',
+        okClass: 'btn-danger',
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await callAction('deleteExpense', { id: exp.id });
+        await refreshData();
+        renderExpenses();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 // ---------- Balances (computed client-side from people + expenses) ----------
@@ -532,110 +558,214 @@ function showSuccess(message, autoCloseMs = 2000) {
   const timer = setTimeout(close, autoCloseMs);
 }
 
-// ---------- State Fair easter egg mini-game ----------
-// State Fair Scramble: grab 🍪 Sweet Martha's cookies before they vanish to
-// the next stall. Sometimes a 🦟 mosquito (Minnesota's "state bird") shows up
-// instead — swat that one by mistake and it's -2 points. Scores are saved to
-// the sheet (per identified person) so everyone can see who got what.
+// ---------- Pothole Dodge easter egg mini-game (racing) ----------
+// A three-lane dodger: your 🏎️ sits at the bottom, Minneapolis road hazards
+// (🕳️ potholes, 🚧 cones, 🦌 deer) scroll toward you, and you swerve between
+// lanes to clear them. Every hazard cleared is a point; one hit ends the run,
+// and the road speeds up the longer you survive. Scores go to the same
+// gameScores sheet the old game used, so the leaderboard/prize plumbing is
+// unchanged.
+//
+// Unlike the other games, a play costs money: see chargeForRacePlay().
 
-const GAME_DURATION_SECONDS = 15;
-const GAME_CELL_COUNT = 9;
-const GAME_SPAWN_MS = 800;
-const GAME_DECOY_EMOJI = '🦟';
-const GAME_DECOY_CHANCE = 0.25;
-const GAME_DECOY_PENALTY = 2;
+const RACE_LANES = 3;
+const RACE_OBSTACLES = ['🕳️', '🚧', '🦌'];
+const RACE_BASE_SPEED = 150;      // px per second at 1.0x
+const RACE_SPEEDUP_PER_DODGE = 0.035; // multiplier gained per hazard cleared
+const RACE_MAX_SPEED_MULT = 3.2;
+const RACE_BASE_SPAWN_MS = 900;   // gap between hazards at 1.0x
+const RACE_CAR_HEIGHT = 44;
 
-let gameState = null; // { score, timeLeft, activeCell, activeIsDecoy, spawnTimer, tickTimer }
+let raceState = null; // { score, lane, speedMult, obstacles, rafId, lastTime, spawnAcc }
 
-const GAME_RESULT_LINES = [
-  "still not enough for a bucket of Sweet Martha's.",
-  "Princess Kay of the Milky Way is impressed, but unpaid.",
-  "somebody on the Balances tab still owes for cheese curds.",
-  "add it to the tab — right next to the corn dogs.",
+const RACE_RESULT_LINES = [
+  'the pothole won. It always wins.',
+  'Public Works has been notified. They will get to it in June.',
+  'that deer came out of nowhere, honest.',
+  'blame the freeze-thaw cycle, not the driver.',
 ];
 
-function buildGameGrid() {
-  const grid = document.getElementById('game-grid');
-  grid.innerHTML = '';
-  for (let i = 0; i < GAME_CELL_COUNT; i++) {
-    const cell = document.createElement('button');
-    cell.type = 'button';
-    cell.className = 'game-cell';
-    cell.dataset.index = String(i);
-    grid.appendChild(cell);
+function raceLaneCenterPct(lane) {
+  return ((lane + 0.5) / RACE_LANES) * 100;
+}
+
+function renderRaceCar() {
+  const car = document.getElementById('race-car');
+  car.style.left = `${raceLaneCenterPct(raceState.lane)}%`;
+}
+
+function moveRaceCar(delta) {
+  if (!raceState) return;
+  const next = raceState.lane + delta;
+  if (next < 0 || next >= RACE_LANES) return;
+  raceState.lane = next;
+  renderRaceCar();
+}
+
+function spawnRaceObstacle() {
+  const track = document.getElementById('race-track');
+  const lane = Math.floor(Math.random() * RACE_LANES);
+  const el = document.createElement('div');
+  el.className = 'race-obstacle';
+  el.textContent = RACE_OBSTACLES[Math.floor(Math.random() * RACE_OBSTACLES.length)];
+  el.style.left = `${raceLaneCenterPct(lane)}%`;
+  el.style.top = '-40px';
+  track.appendChild(el);
+  raceState.obstacles.push({ el, lane, y: -40, scored: false });
+}
+
+function updateRaceHud() {
+  document.getElementById('race-score').textContent = String(raceState.score);
+  document.getElementById('race-speed').textContent = raceState.speedMult.toFixed(1);
+}
+
+// Main loop. Everything is time-based (delta seconds) rather than per-frame, so
+// the difficulty is the same on a 60Hz and a 144Hz screen.
+function raceFrame(now) {
+  if (!raceState) return;
+  const dt = Math.min((now - raceState.lastTime) / 1000, 0.05); // clamp big tab-switch gaps
+  raceState.lastTime = now;
+
+  const track = document.getElementById('race-track');
+  const trackH = track.clientHeight;
+  const carTop = trackH - RACE_CAR_HEIGHT - 8;
+  const speed = RACE_BASE_SPEED * raceState.speedMult;
+
+  raceState.spawnAcc += dt * 1000;
+  const spawnGap = RACE_BASE_SPAWN_MS / raceState.speedMult;
+  if (raceState.spawnAcc >= spawnGap) {
+    raceState.spawnAcc = 0;
+    spawnRaceObstacle();
+  }
+
+  for (let i = raceState.obstacles.length - 1; i >= 0; i--) {
+    const o = raceState.obstacles[i];
+    o.y += speed * dt;
+    o.el.style.top = `${o.y}px`;
+
+    // Collision: overlapping the car's band in the same lane.
+    if (o.lane === raceState.lane && o.y + 34 > carTop && o.y < carTop + RACE_CAR_HEIGHT) {
+      endRaceGame(true);
+      return;
+    }
+
+    if (!o.scored && o.y > carTop + RACE_CAR_HEIGHT) {
+      o.scored = true;
+      raceState.score++;
+      raceState.speedMult = Math.min(RACE_MAX_SPEED_MULT, raceState.speedMult + RACE_SPEEDUP_PER_DODGE);
+      updateRaceHud();
+    }
+
+    if (o.y > trackH + 40) {
+      o.el.remove();
+      raceState.obstacles.splice(i, 1);
+    }
+  }
+
+  raceState.rafId = requestAnimationFrame(raceFrame);
+}
+
+function clearRaceObstacles() {
+  document.querySelectorAll('#race-track .race-obstacle').forEach(el => el.remove());
+}
+
+// Each play is charged as a real 1-cent expense on the trip ledger, paid by
+// whoever played and split across everyone. If nobody's identified (or the
+// backend isn't set up) there's no one to bill, so the play is free.
+const RACE_PLAY_COST = 0.01;
+const RACE_PLAY_MARKER = '🏎️ Pothole Dodge play';
+
+function raceCoinStats() {
+  const plays = state.expenses.filter(e => e.description === RACE_PLAY_MARKER);
+  const total = plays.reduce((sum, e) => sum + e.amount, 0);
+  return { count: plays.length, total: Math.round(total * 100) / 100 };
+}
+
+function renderRaceCostNote() {
+  const { count, total } = raceCoinStats();
+  const el = document.getElementById('race-cost-note');
+  const canCharge = currentUserName && !API_URL.includes('PASTE_YOUR');
+  el.textContent = canCharge
+    ? `🪙 ${money(RACE_PLAY_COST)} a play, billed to you on the Expenses tab. The machine has taken ${money(total)} over ${count} ${count === 1 ? 'play' : 'plays'}.`
+    : '🪙 Normally 1¢ a play — but nobody\'s signed in to bill, so this one\'s on the house.';
+}
+
+async function chargeForRacePlay() {
+  if (!currentUserName || API_URL.includes('PASTE_YOUR')) return true; // nobody to bill
+  const me = state.people.find(p => p.name.toLowerCase() === currentUserName.toLowerCase());
+  if (!me || !state.people.length) return true;
+  try {
+    await callAction('addExpense', {
+      description: RACE_PLAY_MARKER,
+      amount: RACE_PLAY_COST,
+      date: new Date().toISOString().slice(0, 10),
+      paidBy: me.id,
+      participantIds: state.people.map(p => p.id),
+    });
+    await refreshData();
+    return true;
+  } catch (e) {
+    alert(`Couldn't insert your coin: ${e.message}`);
+    return false;
   }
 }
 
-function onGameGridClick(e) {
-  const cell = e.target.closest('.game-cell');
-  if (!cell || !gameState) return;
-
-  // A hit scores (or penalizes, for the decoy); a miss scores nothing — but
-  // either way the target immediately relocates, so you can't just spam-click
-  // the whole grid.
-  if (Number(cell.dataset.index) === gameState.activeCell) {
-    gameState.score += gameState.activeIsDecoy ? -GAME_DECOY_PENALTY : 1;
-    document.getElementById('game-score').textContent = String(gameState.score);
+async function startRaceGame() {
+  const startBtn = document.getElementById('race-start-btn');
+  startBtn.disabled = true;
+  startBtn.textContent = 'Inserting coin…';
+  const paid = await chargeForRacePlay();
+  startBtn.disabled = false;
+  if (!paid) {
+    startBtn.textContent = 'Start';
+    return;
   }
-  spawnMole();
+  renderRaceCostNote();
+
+  document.getElementById('race-intro').classList.add('hidden');
+  document.getElementById('race-result').classList.add('hidden');
+  startBtn.classList.add('hidden');
+  document.getElementById('race-hud').classList.remove('hidden');
+  document.getElementById('race-track').classList.remove('hidden');
+  document.getElementById('race-controls').classList.remove('hidden');
+
+  clearRaceObstacles();
+  raceState = {
+    score: 0,
+    lane: 1,
+    speedMult: 1,
+    obstacles: [],
+    rafId: null,
+    lastTime: performance.now(),
+    spawnAcc: 0,
+  };
+  renderRaceCar();
+  updateRaceHud();
+  raceState.rafId = requestAnimationFrame(raceFrame);
 }
 
-function spawnMole() {
-  if (!gameState) return;
-  document.querySelectorAll('.game-cell').forEach(c => {
-    c.classList.remove('active', 'decoy');
-    c.textContent = '';
-  });
-  const idx = Math.floor(Math.random() * GAME_CELL_COUNT);
-  const isDecoy = Math.random() < GAME_DECOY_CHANCE;
-  gameState.activeCell = idx;
-  gameState.activeIsDecoy = isDecoy;
-  const cell = document.querySelector(`.game-cell[data-index="${idx}"]`);
-  cell.classList.add('active');
-  if (isDecoy) cell.classList.add('decoy');
-  cell.textContent = isDecoy ? GAME_DECOY_EMOJI : '🍪';
-}
+async function endRaceGame(crashed) {
+  if (!raceState) return;
+  cancelAnimationFrame(raceState.rafId);
+  const score = raceState.score;
+  const car = document.getElementById('race-car');
+  raceState = null;
 
-function startFairGame() {
-  buildGameGrid();
-  document.getElementById('game-intro').classList.add('hidden');
-  document.getElementById('game-result').classList.add('hidden');
-  document.getElementById('game-start-btn').classList.add('hidden');
-  document.getElementById('game-leaderboard').classList.add('hidden');
-  document.getElementById('game-hud').classList.remove('hidden');
-  document.getElementById('game-grid').classList.remove('hidden');
+  car.classList.add('crashed');
+  setTimeout(() => car.classList.remove('crashed'), 400);
 
-  gameState = { score: 0, timeLeft: GAME_DURATION_SECONDS, activeCell: null, activeIsDecoy: false };
-  document.getElementById('game-score').textContent = '0';
-  document.getElementById('game-time').textContent = String(GAME_DURATION_SECONDS);
+  document.getElementById('race-track').classList.add('hidden');
+  document.getElementById('race-controls').classList.add('hidden');
+  document.getElementById('race-hud').classList.add('hidden');
+  clearRaceObstacles();
 
-  spawnMole();
-  gameState.spawnTimer = setInterval(spawnMole, GAME_SPAWN_MS);
-  gameState.tickTimer = setInterval(() => {
-    gameState.timeLeft--;
-    document.getElementById('game-time').textContent = String(gameState.timeLeft);
-    if (gameState.timeLeft <= 0) endFairGame();
-  }, 1000);
-}
-
-async function endFairGame() {
-  if (!gameState) return;
-  clearInterval(gameState.spawnTimer);
-  clearInterval(gameState.tickTimer);
-  const score = gameState.score;
-  gameState = null;
-
-  document.getElementById('game-grid').classList.add('hidden');
-  document.getElementById('game-hud').classList.add('hidden');
-
-  // Modulo can go negative in JS when score is negative — normalize the index.
-  const line = GAME_RESULT_LINES[((score % GAME_RESULT_LINES.length) + GAME_RESULT_LINES.length) % GAME_RESULT_LINES.length];
-  const resultEl = document.getElementById('game-result');
-  resultEl.textContent = `🍪 Final score: ${score}! That's ${line}`;
+  const line = RACE_RESULT_LINES[score % RACE_RESULT_LINES.length];
+  const resultEl = document.getElementById('race-result');
+  resultEl.textContent = `🏁 You dodged ${score} ${score === 1 ? 'hazard' : 'hazards'}! ${crashed ? line : ''}`;
   resultEl.classList.remove('hidden');
 
-  const startBtn = document.getElementById('game-start-btn');
-  startBtn.textContent = 'Play again';
+  const startBtn = document.getElementById('race-start-btn');
+  startBtn.textContent = `Play again (${money(RACE_PLAY_COST)})`;
   startBtn.classList.remove('hidden');
 
   if (currentUserName) {
@@ -646,8 +776,7 @@ async function endFairGame() {
       console.error(e);
     }
   }
-  renderLeaderboard('game-leaderboard', state.gameScores);
-  document.getElementById('game-leaderboard').classList.remove('hidden');
+  renderRaceCostNote();
 }
 
 // Shared by every mini-game's leaderboard: keep only each person's best
@@ -662,59 +791,74 @@ function topScoresByPerson(scores, limit = 5) {
   return Array.from(bestByPerson.values()).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-function renderLeaderboard(containerId, scores) {
+const RANK_MEDALS = ['🥇', '🥈', '🥉'];
+
+function renderLeaderboard(containerId, scores, unit = 'pts') {
   const container = document.getElementById(containerId);
   if (!scores.length) {
-    container.innerHTML = '';
+    container.innerHTML = '<p class="empty-state" style="padding: 8px 0">No scores yet — go play a round.</p>';
     return;
   }
-  const top5 = topScoresByPerson(scores);
-  container.innerHTML = `
-    <p class="hint" style="margin-bottom: 6px">🏆 Top 5 scores</p>
-    ${top5.map(s => `
-      <div class="balance-row">
-        <span>${avatarHtml(s.name)}${escapeHtml(s.name)}</span>
-        <span>${s.score} pts</span>
-      </div>
-    `).join('')}
-  `;
+  container.innerHTML = topScoresByPerson(scores).map((s, i) => `
+    <div class="balance-row">
+      <span>${RANK_MEDALS[i] || `${i + 1}.`} ${avatarHtml(s.name)}${escapeHtml(s.name)}</span>
+      <span>${s.score} ${unit}</span>
+    </div>
+  `).join('');
 }
 
-function resetFairGameView() {
-  if (gameState) {
-    clearInterval(gameState.spawnTimer);
-    clearInterval(gameState.tickTimer);
-    gameState = null;
+function resetRaceGameView() {
+  if (raceState) {
+    cancelAnimationFrame(raceState.rafId);
+    raceState = null;
   }
-  document.getElementById('game-intro').classList.remove('hidden');
-  document.getElementById('game-result').classList.add('hidden');
-  document.getElementById('game-hud').classList.add('hidden');
-  document.getElementById('game-grid').classList.add('hidden');
-  document.getElementById('game-leaderboard').classList.remove('hidden');
-  const startBtn = document.getElementById('game-start-btn');
+  clearRaceObstacles();
+  document.getElementById('race-intro').classList.remove('hidden');
+  document.getElementById('race-result').classList.add('hidden');
+  document.getElementById('race-hud').classList.add('hidden');
+  document.getElementById('race-track').classList.add('hidden');
+  document.getElementById('race-controls').classList.add('hidden');
+  const startBtn = document.getElementById('race-start-btn');
   startBtn.textContent = 'Start';
+  startBtn.disabled = false;
   startBtn.classList.remove('hidden');
 }
 
-function closeFairGame() {
-  resetFairGameView();
-  document.getElementById('fair-game-overlay').classList.add('hidden');
+function closeRaceGame() {
+  resetRaceGameView();
+  document.getElementById('race-game-overlay').classList.add('hidden');
 }
 
-document.getElementById('fair-badge').addEventListener('click', async () => {
-  document.getElementById('fair-game-overlay').classList.remove('hidden');
+document.getElementById('race-badge').addEventListener('click', async () => {
+  document.getElementById('race-game-overlay').classList.remove('hidden');
   try {
     await refreshData();
   } catch (e) {
     console.error(e);
   }
-  renderLeaderboard('game-leaderboard', state.gameScores);
+  renderRaceCostNote();
+  document.getElementById('race-start-btn').textContent = `Start (${money(RACE_PLAY_COST)})`;
 });
-document.getElementById('game-grid').addEventListener('click', onGameGridClick);
-document.getElementById('game-start-btn').addEventListener('click', startFairGame);
-document.getElementById('game-close').addEventListener('click', closeFairGame);
-document.getElementById('fair-game-overlay').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeFairGame();
+document.getElementById('race-start-btn').addEventListener('click', startRaceGame);
+document.getElementById('race-close').addEventListener('click', closeRaceGame);
+document.getElementById('race-left').addEventListener('click', () => moveRaceCar(-1));
+document.getElementById('race-right').addEventListener('click', () => moveRaceCar(1));
+document.getElementById('race-game-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeRaceGame();
+});
+
+// Keyboard steering, but only while a run is actually in progress.
+document.addEventListener('keydown', (e) => {
+  if (!raceState) return;
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { moveRaceCar(-1); e.preventDefault(); }
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { moveRaceCar(1); e.preventDefault(); }
+});
+
+// Tapping the left/right half of the track steers too (nicer on phones).
+document.getElementById('race-track').addEventListener('pointerdown', (e) => {
+  if (!raceState) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  moveRaceCar(e.clientX - rect.left < rect.width / 2 ? -1 : 1);
 });
 
 // ---------- Ice-fishing easter egg mini-game ("Set the Hook") ----------
@@ -734,12 +878,32 @@ const REACTION_POINT_CAP_MS = 1000; // reactions at/above this score 0
 
 let reactionState = null; // { score, roundsPlayed, phase, readyAt, roundTimeout }
 
+// What's on the end of the line this round. The trophy walleye (Minnesota's
+// state fish) doubles the round's points, and a snagged boot is worth nothing
+// no matter how fast you are — so a bite is no longer a guaranteed payday and
+// you have to actually look before you yank.
+const REACTION_CATCHES = [
+  { id: 'panfish', emoji: '🐟', label: 'Panfish', weight: 0.55, multiplier: 1 },
+  { id: 'walleye', emoji: '🏆', label: 'Trophy walleye', weight: 0.3, multiplier: 2 },
+  { id: 'boot', emoji: '🥾', label: 'Old boot', weight: 0.15, multiplier: 0 },
+];
+
+function pickReactionCatch() {
+  let roll = Math.random();
+  for (const c of REACTION_CATCHES) {
+    if (roll < c.weight) return c;
+    roll -= c.weight;
+  }
+  return REACTION_CATCHES[0];
+}
+
 function startReactionRound() {
   if (!reactionState) return;
   const btn = document.getElementById('reaction-btn');
   reactionState.phase = 'waiting';
+  reactionState.catch = null;
   btn.textContent = 'Wait for a bite…';
-  btn.classList.remove('ready');
+  btn.classList.remove('ready', 'trophy');
   btn.classList.add('waiting');
 
   const delay = REACTION_MIN_DELAY_MS + Math.random() * (REACTION_MAX_DELAY_MS - REACTION_MIN_DELAY_MS);
@@ -747,9 +911,11 @@ function startReactionRound() {
     if (!reactionState) return;
     reactionState.phase = 'ready';
     reactionState.readyAt = performance.now();
-    btn.textContent = 'Set the hook!';
+    reactionState.catch = pickReactionCatch();
+    btn.textContent = `${reactionState.catch.emoji} ${reactionState.catch.label} — set the hook!`;
     btn.classList.remove('waiting');
     btn.classList.add('ready');
+    if (reactionState.catch.multiplier > 1) btn.classList.add('trophy');
   }, delay);
 }
 
@@ -763,9 +929,13 @@ function onReactionBtnClick() {
     feedbackEl.textContent = `Jigged too soon — you spooked it! -${REACTION_EARLY_PENALTY}`;
   } else {
     const elapsed = performance.now() - reactionState.readyAt;
-    const points = Math.max(0, Math.round((REACTION_POINT_CAP_MS - elapsed) / REACTION_POINT_STEP_MS));
+    const base = Math.max(0, Math.round((REACTION_POINT_CAP_MS - elapsed) / REACTION_POINT_STEP_MS));
+    const c = reactionState.catch;
+    const points = base * c.multiplier;
     reactionState.score += points;
-    feedbackEl.textContent = `${Math.round(elapsed)}ms — +${points}`;
+    feedbackEl.textContent = c.multiplier === 0
+      ? `${c.emoji} ${c.label}! ${Math.round(elapsed)}ms of your life, +0`
+      : `${c.emoji} ${c.label} — ${Math.round(elapsed)}ms — +${points}${c.multiplier > 1 ? ` (${base} ×${c.multiplier})` : ''}`;
   }
 
   reactionState.roundsPlayed++;
@@ -783,12 +953,11 @@ function startReactionGame() {
   document.getElementById('reaction-intro').classList.add('hidden');
   document.getElementById('reaction-result').classList.add('hidden');
   document.getElementById('reaction-start-btn').classList.add('hidden');
-  document.getElementById('reaction-leaderboard').classList.add('hidden');
   document.getElementById('reaction-hud').classList.remove('hidden');
   document.getElementById('reaction-feedback').classList.remove('hidden');
   document.getElementById('reaction-btn').classList.remove('hidden');
 
-  reactionState = { score: 0, roundsPlayed: 0, phase: null, readyAt: 0, roundTimeout: null };
+  reactionState = { score: 0, roundsPlayed: 0, phase: null, readyAt: 0, roundTimeout: null, catch: null };
   document.getElementById('reaction-score').textContent = '0';
   document.getElementById('reaction-round').textContent = `0/${REACTION_ROUND_COUNT}`;
   document.getElementById('reaction-feedback').textContent = '';
@@ -807,7 +976,7 @@ async function endReactionGame() {
   document.getElementById('reaction-feedback').classList.add('hidden');
 
   const resultEl = document.getElementById('reaction-result');
-  resultEl.textContent = `🎣 Final score: ${score}! ${score >= 36 ? 'Fastest hook on the lake.' : 'Reflexes could use a hotdish break.'}`;
+  resultEl.textContent = `🎣 Final score: ${score}! ${score >= 50 ? 'Fastest hook on the lake.' : 'Reflexes could use a hotdish break.'}`;
   resultEl.classList.remove('hidden');
 
   const startBtn = document.getElementById('reaction-start-btn');
@@ -822,8 +991,6 @@ async function endReactionGame() {
       console.error(e);
     }
   }
-  renderLeaderboard('reaction-leaderboard', state.reactionScores);
-  document.getElementById('reaction-leaderboard').classList.remove('hidden');
 }
 
 function resetReactionGameView() {
@@ -836,7 +1003,6 @@ function resetReactionGameView() {
   document.getElementById('reaction-hud').classList.add('hidden');
   document.getElementById('reaction-btn').classList.add('hidden');
   document.getElementById('reaction-feedback').classList.add('hidden');
-  document.getElementById('reaction-leaderboard').classList.remove('hidden');
   const startBtn = document.getElementById('reaction-start-btn');
   startBtn.textContent = 'Start';
   startBtn.classList.remove('hidden');
@@ -847,14 +1013,8 @@ function closeReactionGame() {
   document.getElementById('reaction-game-overlay').classList.add('hidden');
 }
 
-document.getElementById('reaction-game-badge').addEventListener('click', async () => {
+document.getElementById('reaction-game-badge').addEventListener('click', () => {
   document.getElementById('reaction-game-overlay').classList.remove('hidden');
-  try {
-    await refreshData();
-  } catch (e) {
-    console.error(e);
-  }
-  renderLeaderboard('reaction-leaderboard', state.reactionScores);
 });
 document.getElementById('reaction-btn').addEventListener('click', onReactionBtnClick);
 document.getElementById('reaction-start-btn').addEventListener('click', startReactionGame);
@@ -865,7 +1025,7 @@ document.getElementById('reaction-game-overlay').addEventListener('click', (e) =
 
 // ---------- Mini-game champion prizes ----------
 // Two independent $2 bounties added to the REAL expense ledger — one for
-// whoever holds the best State Fair Scramble score, one for whoever holds the
+// whoever holds the best Pothole Dodge score, one for whoever holds the
 // best Set the Hook score, at the moment this is clicked. (Winning both means
 // two separate $2 credits, not one combined $2.) There's no "end of trip"
 // date in this app, so it's a manual button rather than something automatic.
@@ -880,7 +1040,7 @@ document.getElementById('reaction-game-overlay').addEventListener('click', (e) =
 
 const PRIZE_AMOUNT = 2;
 const PRIZE_GAMES = [
-  { key: 'gameScores', label: 'State Fair Scramble' },
+  { key: 'gameScores', label: 'Pothole Dodge' },
   { key: 'reactionScores', label: 'Set the Hook' },
 ];
 
@@ -1076,11 +1236,12 @@ function refreshDylanAffordability() {
   });
 }
 
-// Top 5 by current Dylan count. Others come from the last fetch; the current
-// player's row is overlaid with their live count so the board moves in
-// real time as they click and idle.
-function renderDylanLeaderboard() {
-  const container = document.getElementById('dylan-leaderboard');
+// Top 5 by current Dylan count, rendered into the shared Top-scores overlay.
+// Others come from the last fetch; the current player's row is overlaid with
+// their live in-memory count so it's accurate even mid-session.
+function renderDylanLeaderboard(containerId = 'scores-dylan') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
   const rows = (state.dylan || []).map(d => ({ name: d.name, count: Number(d.count) || 0 }));
   if (currentUserName && dylanState) {
     const mine = rows.find(r => r.name.toLowerCase() === currentUserName.toLowerCase());
@@ -1088,19 +1249,18 @@ function renderDylanLeaderboard() {
     else rows.push({ name: currentUserName, count: Math.floor(dylanState.count) });
   }
   if (!rows.length) {
-    container.innerHTML = '';
+    container.innerHTML = '<p class="empty-state" style="padding: 8px 0">No Dylans yet — go click Bob.</p>';
     return;
   }
-  const top5 = rows.sort((a, b) => b.count - a.count).slice(0, 5);
-  container.innerHTML = `
-    <p class="hint" style="margin-bottom: 6px">🏆 Top 5 Dylans</p>
-    ${top5.map(r => `
+  container.innerHTML = rows
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((r, i) => `
       <div class="balance-row">
-        <span>${avatarHtml(r.name)}${escapeHtml(r.name)}</span>
+        <span>${RANK_MEDALS[i] || `${i + 1}.`} ${avatarHtml(r.name)}${escapeHtml(r.name)}</span>
         <span>🎸 ${formatDylans(r.count)}</span>
       </div>
-    `).join('')}
-  `;
+    `).join('');
 }
 
 function spawnDylanFloater(text) {
@@ -1118,7 +1278,6 @@ function onDylanClick() {
   earnDylans(gain);
   renderDylanStats();
   refreshDylanAffordability();
-  renderDylanLeaderboard();
   spawnDylanFloater(`+${formatDylans(gain)}`);
   const target = document.getElementById('dylan-click-target');
   target.classList.remove('pop');
@@ -1145,7 +1304,6 @@ function dylanTick() {
     earnDylans(dps * (DYLAN_TICK_MS / 1000));
     renderDylanStats();
     refreshDylanAffordability();
-    renderDylanLeaderboard();
   }
 }
 
@@ -1197,7 +1355,6 @@ async function openDylanGame() {
 
   renderDylanStats();
   renderDylanUpgrades();
-  renderDylanLeaderboard();
 
   clearInterval(dylanTickTimer);
   dylanTickTimer = setInterval(dylanTick, DYLAN_TICK_MS);
@@ -1222,7 +1379,6 @@ async function resetDylanGame() {
   await saveDylanState();
   renderDylanStats();
   renderDylanUpgrades();
-  renderDylanLeaderboard();
   document.getElementById('dylan-away').classList.add('hidden');
 }
 
@@ -1250,6 +1406,32 @@ window.addEventListener('beforeunload', () => {
     });
     navigator.sendBeacon(API_URL, body);
   } catch (e) { /* best effort */ }
+});
+
+// ---------- Top scores (all leaderboards in one place) ----------
+// Every game's board lives here rather than inside each game's modal, so you
+// can compare them side by side. Each list keeps only a person's best score.
+
+async function openLeaderboards() {
+  document.getElementById('scores-overlay').classList.remove('hidden');
+  try {
+    await refreshData();
+  } catch (e) {
+    console.error(e);
+  }
+  renderLeaderboard('scores-race', state.gameScores, 'dodged');
+  renderLeaderboard('scores-hook', state.reactionScores, 'pts');
+  renderDylanLeaderboard('scores-dylan');
+}
+
+function closeLeaderboards() {
+  document.getElementById('scores-overlay').classList.add('hidden');
+}
+
+document.getElementById('scores-badge').addEventListener('click', openLeaderboards);
+document.getElementById('scores-close').addEventListener('click', closeLeaderboards);
+document.getElementById('scores-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeLeaderboards();
 });
 
 // ---------- Activity log ----------

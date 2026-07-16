@@ -134,8 +134,9 @@ function doPost(e) {
     switch (params.action) {
       case 'addPerson': return addPerson(data);
       case 'addExpense': return addExpense(data);
+      case 'deleteExpense': return deleteExpense(data);
       case 'settle': return settle(data);
-      case 'addGameScore': return addScore('gameScores', 'the State Fair mini-game', data);
+      case 'addGameScore': return addScore('gameScores', 'the Pothole Dodge mini-game', data);
       case 'addReactionScore': return addScore('reactionScores', 'the ice-fishing mini-game', data);
       case 'saveDylan': return saveDylan(data);
       default: return jsonResponse({ error: 'Unknown action' });
@@ -189,6 +190,26 @@ function addExpense(data) {
   const payerName = (people.find(p => p.id === paidBy) || {}).name || 'Unknown';
   log(`EXPENSE_ADDED "${description}" $${roundedAmount.toFixed(2)} paid by ${payerName}`);
   return jsonResponse({ id, description, amount: roundedAmount, paidBy, date, participantIds, createdAt, isSettlement: false });
+}
+
+// Deletes a single expense (or settlement) row by id. Row deletion shifts the
+// rows below it up, but we return as soon as we find and delete the match, so
+// there's no iteration hazard.
+function deleteExpense(data) {
+  const id = data.id;
+  if (!id) return jsonResponse({ error: 'Expense id is required' });
+
+  const sheet = getSheet('expenses');
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][0]) === String(id)) {
+      const description = values[r][1];
+      sheet.deleteRow(r + 1); // +1: values is 0-based incl. header, sheet rows are 1-based
+      log(`EXPENSE_DELETED "${description}" (id ${id})`);
+      return jsonResponse({ ok: true, id });
+    }
+  }
+  return jsonResponse({ error: 'Expense not found' });
 }
 
 // Records a settle-up payment as a special expense: paidBy the debtor, with the
